@@ -10,14 +10,17 @@ use swc_core::{
 };
 
 #[cfg(test)]
-use swc_ecma_parser::{Syntax, TsConfig};
+use swc_core::ecma::visit::Fold;
+
+#[cfg(test)]
+use swc_ecma_parser::Syntax;
 
 mod utils;
 pub use crate::utils::helpers;
 
-pub struct TransformVisitor;
+pub struct TranslationConverterVisitor;
 
-impl VisitMut for TransformVisitor {
+impl VisitMut for TranslationConverterVisitor {
     fn visit_mut_call_expr(&mut self, call_expr: &mut CallExpr) {
         // required to ensure that other visit_mut fn are called for children
         call_expr.visit_mut_children_with(self);
@@ -138,52 +141,73 @@ impl VisitMut for TransformVisitor {
 
 #[plugin_transform]
 pub fn process_transform(program: Program, _metadata: TransformPluginProgramMetadata) -> Program {
-    program.fold_with(&mut as_folder(TransformVisitor))
+    program.fold_with(&mut as_folder(TranslationConverterVisitor))
+}
+
+#[cfg(test)]
+fn tr() -> impl Fold {
+    use swc_core::{common::Mark, ecma::transforms::base::resolver};
+    use swc_visit::chain;
+
+    chain!(
+        resolver(Mark::new(), Mark::new(), false),
+        as_folder(TranslationConverterVisitor),
+    )
+}
+
+#[cfg(test)]
+fn config() -> Syntax {
+    use swc_ecma_parser::TsConfig;
+
+    return Syntax::Typescript(TsConfig {
+        tsx: true,
+        ..Default::default()
+    });
 }
 
 test!(
-    Default::default(),
-    |_| as_folder(TransformVisitor),
+    config(),
+    |_| tr(),
     converts_l_member_expressions_inside_of_t_functions,
     r#"t(l.common.fooBar);"#,
-    r#"t(common:fooBar);"#
+    r#"t("common:fooBar");"#
 );
 
 test!(
-    Default::default(),
-    |_| as_folder(TransformVisitor),
+    config(),
+    |_| tr(),
     converts_l_member_expressions_inside_of_t_func_with_variables,
-    r#"t(l.common.fooBar, { userName });"#,
-    r#"t(common:fooBar, { userName });"#
+    "t(l.common.fooBar, { userName });",
+    "t(\"common:fooBar\", { userName });"
 );
 
 test!(
-    Default::default(),
-    |_| as_folder(TransformVisitor),
+    config(),
+    |_| tr(),
     converts_l_to_template_literal_member_expressions,
     r#"const bar = 'cat';t(l.common.foo[bar]);"#,
     r#"const bar = 'cat';t(`common:foo.${bar}`);"#
 );
 
 test!(
-    Default::default(),
-    |_| as_folder(TransformVisitor),
+    config(),
+    |_| tr(),
     converts_l_template_literal_member_expressions_with_variable_namespace,
     r#"t(l[common].foo[bar]);"#,
     r#"t(`${common}:foo.${bar}`);"#
 );
 
 test!(
-    Default::default(),
-    |_| as_folder(TransformVisitor),
+    config(),
+    |_| tr(),
     converts_l_that_is_part_of_ternary,
     r#"t(something ? l.user.foo : l.user.bar);"#,
-    r#"t(something ? user:foo : user:bar);"#
+    r#"t(something ? "user:foo" : "user:bar");"#
 );
 
 test!(
-    Default::default(),
-    |_| as_folder(TransformVisitor),
+    config(),
+    |_| tr(),
     converts_l_that_is_outside_of_t_inside_a_function,
     r#"
     const testFunc = () => {
@@ -192,41 +216,38 @@ test!(
     "#,
     r#"
     const testFunc = () => {
-      return userName:foo;
+      return "userName:foo";
     }
     "#
 );
 
 test!(
-    Default::default(),
-    |_| as_folder(TransformVisitor),
+    config(),
+    |_| tr(),
     converts_l_with_many_nested_namesapces,
     r#"t(l.clerk.one.two.three.four);"#,
-    r#"t(clerk:one.two.three.four);"#
+    r#"t("clerk:one.two.three.four");"#
 );
 
 test!(
-    Default::default(),
-    |_| as_folder(TransformVisitor),
+    config(),
+    |_| tr(),
     converts_nested_l_member_expression,
     r#"t(l.userName.bla, { label: l.userName.label });"#,
-    r#"t(userName:bla, { label: userName:label });"#
+    r#"t("userName:bla", { label: "userName:label" });"#
 );
 
 test!(
-    Default::default(),
-    |_| as_folder(TransformVisitor),
+    config(),
+    |_| tr(),
     does_not_convert_member_expressions_that_do_not_start_with_l,
     r#"t(b.userName.bla);"#,
     r#"t(b.userName.bla);"#
 );
 
 test!(
-    Syntax::Typescript(TsConfig {
-        tsx: true,
-        ..Default::default()
-    }),
-    |_| as_folder(TransformVisitor),
+    config(),
+    |_| tr(),
     converts_nested_t_functions,
     r#"
     <Component>
@@ -237,7 +258,7 @@ test!(
     "#,
     r#"
     <Component>
-      {t(common:foo1, {
+      {t("common:foo1", {
         label: t(`common:foo2.${bar}`),
       })}
     </Component>

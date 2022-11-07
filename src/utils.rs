@@ -104,11 +104,11 @@ pub mod helpers {
             return Expr::Tpl(tpl);
         }
 
-        let translation_raw = format!("{}", translation_value);
+        let translation_raw = format!(r#""{}""#, translation_value);
 
         let string_literal = Str {
-            raw: Some(translation_raw.clone().into()),
-            value: translation_raw.into(),
+            raw: Some(translation_raw.into()),
+            value: translation_value.into(),
             span: span,
         };
 
