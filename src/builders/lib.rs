@@ -1,6 +1,6 @@
 use swc_core::{
     common::Span,
-    ecma::ast::{Expr, Ident, Lit, MemberExpr, Str, Tpl, TplElement},
+    ecma::ast::{Expr, Ident, JSXExpr, Lit, MemberExpr, Str, Tpl, TplElement},
 };
 
 use crate::builders::{serializers, utils};
@@ -62,6 +62,49 @@ pub fn box_expr(member: &MemberExpr, span: Span) -> Option<Box<Expr>> {
 
     // This Expr can then be inserted into the AST to complete the code transformation process
     return Some(Box::new(expr));
+}
+
+/// Generates a JSXExpr give a MemberExpr and Span
+///
+/// # Examples
+/// ```
+/// let span = Span::new(BytePos(0), BytePos(0), SyntaxContext::empty()).into();
+/// let foobar_ident = Ident::new("foobar".into(), span).into();
+/// let l_ident = Ident::new("l".into(), span).into();
+/// let common_ident = Ident::new("common".into(), span).into();
+///
+/// let nested_member_expr = MemberExpr {
+///     obj: Box::new(common_ident),
+///     prop: MemberProp::Ident(l_ident),
+///     span: span,
+/// };
+///
+/// // A member representing l.common.foobar
+/// let member_expr = MemberExpr {
+///     obj: Box::new(nested_member_expr.into()),
+///     prop: MemberProp::Ident(foobar_ident),
+///     span: span,
+/// };
+///
+/// assert_eq!(
+///     jsx_expr(member_expr, span),
+///     JSXExpr::Expr(
+///         Box::new(Expr::Lit(Lit::Str(Str {
+///             raw: Some(r#""common:foobar""#),
+///             value: "common:foobar",
+///             span: span,
+///         })))
+///     )
+/// );
+/// ```
+pub fn jsx_expr(member: &MemberExpr, span: Span) -> Option<JSXExpr> {
+    let expr = box_expr(member, span);
+
+    if expr.is_none() {
+        return None;
+    }
+
+    return Some(JSXExpr::Expr(expr.unwrap()));
 }
 
 /// Given a String like "common:foobar" expr_lit will generate an Expr::Lit enum

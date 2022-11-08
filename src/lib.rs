@@ -1,4 +1,5 @@
-use swc_core::ecma::ast::{CondExpr, KeyValueProp, ReturnStmt};
+use builders::lib::jsx_expr;
+use swc_core::ecma::ast::{CondExpr, JSXExpr, JSXExprContainer, KeyValueProp, ReturnStmt};
 use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata};
 use swc_core::{
     common::Spanned,
@@ -21,8 +22,6 @@ mod builders {
     pub mod utils;
 }
 
-mod utils;
-
 pub struct TranslationConverterVisitor;
 
 impl VisitMut for TranslationConverterVisitor {
@@ -31,26 +30,23 @@ impl VisitMut for TranslationConverterVisitor {
         // required to ensure that other visit_mut fn are called for children
         call_expr.visit_mut_children_with(self);
 
-        if utils::is_t_expression(call_expr) {
-            // if arguments are empty, skip, nothing to do
-            // This would only happen if you used t like so t();
-            // Not sure why you'd do that but hey
-            if call_expr.args.is_empty() {
-                return;
-            }
+        // if arguments are empty, skip, nothing to do
+        // This would only happen if you used t like so t();
+        // Not sure why you'd do that but hey
+        if call_expr.args.is_empty() {
+            return;
+        }
 
-            // we only care about the first argument in a t expression
-            // second argument could be variables: t(l.common.foobar, { count });
-            // when second argument is a translation, that is handled by visit_mut_key_value_prop
-            let arg = call_expr.args.get_mut(0).unwrap();
-
+        // We must loop through all args of the call_expr for cases like so:
+        // ex: mobileHeaderContent(faChevronDown, l.common.ShowOrderSummary)
+        for (i, arg) in call_expr.args.clone().iter().enumerate() {
             // t(l.common.foobar);
             if arg.expr.is_member() {
                 let member_expr = arg.expr.as_member().unwrap();
                 let box_expr = builders::lib::box_expr(member_expr, arg.span());
 
                 if box_expr.is_some() {
-                    call_expr.args[0] = ExprOrSpread {
+                    call_expr.args[i] = ExprOrSpread {
                         spread: None,
                         expr: box_expr.unwrap(),
                     }
@@ -126,6 +122,25 @@ impl VisitMut for TranslationConverterVisitor {
 
             if box_expr.is_some() {
                 key_value_prop.value = box_expr.unwrap();
+            }
+        }
+    }
+
+    fn visit_mut_jsx_expr_container(&mut self, jsx_expr_cont: &mut JSXExprContainer) {
+        // required to ensure that other visit_mut fn are called for children
+        jsx_expr_cont.visit_mut_children_with(self);
+
+        match jsx_expr_cont.expr.clone() {
+            JSXExpr::JSXEmptyExpr(_) => return,
+            JSXExpr::Expr(expr) => {
+                if expr.is_member() {
+                    let member_expr = expr.as_member().unwrap();
+                    let box_expr = builders::lib::box_expr(member_expr, expr.span());
+
+                    if box_expr.is_some() {
+                        jsx_expr_cont.expr = jsx_expr(member_expr, jsx_expr_cont.span()).unwrap();
+                    }
+                }
             }
         }
     }
@@ -270,5 +285,39 @@ test!(
         label: t(`common:foo2.${bar}`),
       })}
     </Component>
+    "#
+);
+
+test!(
+    config(),
+    |_| tr(),
+    converts_trans_i18n_key,
+    r#"
+    <Trans i18nKey={l.common.foobar}>
+      hello world
+    </Trans>
+    "#,
+    r#"
+    <Trans i18nKey={"common:foobar"}>
+      hello world
+    </Trans>
+    "#
+);
+
+test!(
+    config(),
+    |_| tr(),
+    converts_trans_nested_in_call_expr_in_jsx_expr,
+    r#"
+    <Collapsible
+        trigger={mobileHeaderContent(faChevronDown, l.common.ShowOrderSummary)}
+        triggerWhenOpen={mobileHeaderContent(faChevronUp, l.common.HideOrderSummary)}
+    />
+    "#,
+    r#"
+    <Collapsible
+        trigger={mobileHeaderContent(faChevronDown, "common:ShowOrderSummary")}
+        triggerWhenOpen={mobileHeaderContent(faChevronUp, "common:HideOrderSummary")}
+    />
     "#
 );
