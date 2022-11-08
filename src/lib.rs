@@ -1,4 +1,4 @@
-use swc_core::ecma::ast::{KeyValueProp, ReturnStmt};
+use swc_core::ecma::ast::{CondExpr, KeyValueProp, ReturnStmt};
 use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata};
 use swc_core::{
     common::Spanned,
@@ -15,104 +15,101 @@ use swc_core::ecma::visit::Fold;
 #[cfg(test)]
 use swc_ecma_parser::Syntax;
 
+mod builders {
+    pub mod lib;
+    pub mod serializers;
+    pub mod utils;
+}
+
 mod utils;
-pub use crate::utils::helpers;
 
 pub struct TranslationConverterVisitor;
 
 impl VisitMut for TranslationConverterVisitor {
+    // t(l.common.foo...);
     fn visit_mut_call_expr(&mut self, call_expr: &mut CallExpr) {
         // required to ensure that other visit_mut fn are called for children
         call_expr.visit_mut_children_with(self);
 
-        if helpers::is_t_expression(call_expr) {
+        if utils::is_t_expression(call_expr) {
             // if arguments are empty, skip, nothing to do
+            // This would only happen if you used t like so t();
+            // Not sure why you'd do that but hey
             if call_expr.args.is_empty() {
                 return;
             }
 
-            // we only ever care about the first argument in a t expression
+            // we only care about the first argument in a t expression
             // second argument could be variables: t(l.common.foobar, { count });
             // when second argument is a translation, that is handled by visit_mut_key_value_prop
             let arg = call_expr.args.get_mut(0).unwrap();
 
+            // t(l.common.foobar);
             if arg.expr.is_member() {
                 let member_expr = arg.expr.as_member().unwrap();
+                let box_expr = builders::lib::box_expr(member_expr, arg.span());
 
-                // verify that the member_expression has l before converting
-                if helpers::has_child_l(member_expr) {
-                    let translation_value = helpers::serialize_l_expr(member_expr, &mut vec![]);
-
-                    let expr = helpers::build_translation_expr(
-                        translation_value,
-                        call_expr.args[0].span(),
-                    );
-
+                if box_expr.is_some() {
                     call_expr.args[0] = ExprOrSpread {
                         spread: None,
-                        expr: Box::new(expr),
-                    }
-                }
-            } else if arg.expr.is_cond() {
-                // for cases where nested ternaries t(something ? l.common.foo1 : l.common.foo2);
-                let cond_expr = arg.expr.as_mut_cond().unwrap();
-
-                if cond_expr.cons.is_member() {
-                    let member_expr = cond_expr.cons.as_member().unwrap();
-
-                    // verify that the member_expression has l before converting
-                    if helpers::has_child_l(member_expr) {
-                        let translation_value = helpers::serialize_l_expr(member_expr, &mut vec![]);
-
-                        let expr = helpers::build_translation_expr(
-                            translation_value,
-                            cond_expr.cons.span(),
-                        );
-
-                        cond_expr.cons = Box::new(expr)
-                    }
-                }
-
-                if cond_expr.alt.is_member() {
-                    let member_expr = cond_expr.alt.as_member().unwrap();
-
-                    // verify that the member_expression has l before converting
-                    if helpers::has_child_l(member_expr) {
-                        let translation_value = helpers::serialize_l_expr(member_expr, &mut vec![]);
-
-                        let expr = helpers::build_translation_expr(
-                            translation_value,
-                            cond_expr.alt.span(),
-                        );
-
-                        cond_expr.alt = Box::new(expr)
+                        expr: box_expr.unwrap(),
                     }
                 }
             }
         }
     }
 
+    // for cases where the translation is nested inside a conditional statement somewhere
+    // isFoo ? l.common.foo : l.common.bar;
+    fn visit_mut_cond_expr(&mut self, cond_expr: &mut CondExpr) {
+        // required to ensure that other visit_mut fn are called for children
+        cond_expr.visit_mut_children_with(self);
+
+        // cons here being the first result in our ternary if truthy
+        // from the above example comment that would be l.common.foo
+        if cond_expr.cons.is_member() {
+            let member_expr = cond_expr.cons.as_member().unwrap();
+            let box_expr = builders::lib::box_expr(member_expr, cond_expr.cons.span());
+
+            if box_expr.is_some() {
+                cond_expr.cons = box_expr.unwrap();
+            }
+        }
+
+        // alt here being the second result in our ternary if falsy
+        // from the above example comment that would be l.common.bar
+        if cond_expr.alt.is_member() {
+            let member_expr = cond_expr.alt.as_member().unwrap();
+            let box_expr = builders::lib::box_expr(member_expr, cond_expr.alt.span());
+
+            if box_expr.is_some() {
+                cond_expr.alt = box_expr.unwrap();
+            }
+        }
+    }
+
+    // for cases where the translation is returned as part of a function and not nested inside of a t call
+    // const func = () => l.common.foobar;
     fn visit_mut_return_stmt(&mut self, return_stmt: &mut ReturnStmt) {
         // required to ensure that other visit_mut fn are called for children
         return_stmt.visit_mut_children_with(self);
 
-        if return_stmt.arg.is_some() {
-            // we only ever care about the first argument in a t expression
-            // second argument could be variables: t(l.common.foobar, { count });
-            let arg = return_stmt.arg.clone().unwrap();
+        // If there's no arguments to our return statement, we don't need to do anything
+        if return_stmt.arg.is_none() {
+            return;
+        }
 
-            if arg.is_member() {
-                let member_expr = arg.as_member().unwrap();
+        // we only care about the first argument in a t expression
+        // second argument could be variables: t(l.common.foobar, { count });
+        // when second argument is a translation, that is handled by visit_mut_key_value_prop
+        let arg = return_stmt.arg.clone().unwrap();
 
-                // verify that the member_expression has l before converting
-                if helpers::has_child_l(member_expr) {
-                    let translation_value = helpers::serialize_l_expr(member_expr, &mut vec![]);
+        if arg.is_member() {
+            let member_expr = arg.as_member().unwrap();
+            let box_expr = builders::lib::box_expr(member_expr, return_stmt.arg.span());
 
-                    let expr =
-                        helpers::build_translation_expr(translation_value, return_stmt.arg.span());
-
-                    return_stmt.arg = Some(Box::new(expr));
-                }
+            if box_expr.is_some() {
+                return_stmt.arg = box_expr;
             }
         }
     }
@@ -125,15 +122,10 @@ impl VisitMut for TranslationConverterVisitor {
 
         if key_value_prop.value.is_member() {
             let member_expr = key_value_prop.value.as_member().unwrap();
+            let box_expr = builders::lib::box_expr(member_expr, key_value_prop.value.span());
 
-            // verify that the member_expression has l before converting
-            if helpers::has_child_l(member_expr) {
-                let translation_value = helpers::serialize_l_expr(member_expr, &mut vec![]);
-
-                let expr =
-                    helpers::build_translation_expr(translation_value, key_value_prop.value.span());
-
-                key_value_prop.value = Box::new(expr);
+            if box_expr.is_some() {
+                key_value_prop.value = box_expr.unwrap();
             }
         }
     }
@@ -177,8 +169,8 @@ test!(
     config(),
     |_| tr(),
     converts_l_member_expressions_inside_of_t_func_with_variables,
-    "t(l.common.fooBar, { userName });",
-    "t(\"common:fooBar\", { userName });"
+    r#"t(l.common.fooBar, { userName });"#,
+    r#"t("common:fooBar", { userName });"#
 );
 
 test!(
@@ -217,6 +209,22 @@ test!(
     r#"
     const testFunc = () => {
       return "userName:foo";
+    }
+    "#
+);
+
+test!(
+    config(),
+    |_| tr(),
+    converts_cond_expr_with_l_in_functions,
+    r#"
+    const testFunc = () => {
+      return true ? l.userName.foo : l.userName.bar;
+    }
+    "#,
+    r#"
+    const testFunc = () => {
+      return true ? "userName:foo" : "userName:bar";
     }
     "#
 );
