@@ -310,14 +310,30 @@ test!(
     converts_trans_nested_in_call_expr_in_jsx_expr,
     r#"
     <Collapsible
-        trigger={mobileHeaderContent(faChevronDown, l.common.ShowOrderSummary)}
-        triggerWhenOpen={mobileHeaderContent(faChevronUp, l.common.HideOrderSummary)}
+      trigger={mobileHeaderContent(faChevronDown, l.common.ShowOrderSummary)}
+      triggerWhenOpen={mobileHeaderContent(faChevronUp, l.common.HideOrderSummary)}
     />
     "#,
     r#"
     <Collapsible
-        trigger={mobileHeaderContent(faChevronDown, "common:ShowOrderSummary")}
-        triggerWhenOpen={mobileHeaderContent(faChevronUp, "common:HideOrderSummary")}
+      trigger={mobileHeaderContent(faChevronDown, "common:ShowOrderSummary")}
+      triggerWhenOpen={mobileHeaderContent(faChevronUp, "common:HideOrderSummary")}
     />
+    "#
+);
+
+test!(
+    config(),
+    |_| tr(),
+    converts_l_nested_in_template_literals,
+    r#"
+    const variable = `${obj.property} ${t(l.common.foo1, {
+      count: obj.property,
+    })} ($${price.toFixed(2)} ${t(l.common.foo2)})`;
+    "#,
+    r#"
+    const variable = `${obj.property} ${t("common:foo1", {
+      count: obj.property,
+    })} ($${price.toFixed(2)} ${t("common:foo2")})`;
     "#
 );

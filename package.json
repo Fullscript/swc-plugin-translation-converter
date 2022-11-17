@@ -1,6 +1,6 @@
 {
   "name": "@fullscript/swc-plugin-translation-converter",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "SWC plugin for converting Fullscript translations into react-i18next compatible code",
   "author": "Ryan O'Connor",
   "license": "MIT",
