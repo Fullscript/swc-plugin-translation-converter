@@ -1,9 +1,11 @@
 use swc_core::{
     common::Span,
-    ecma::ast::{Expr, Ident, JSXExpr, Lit, MemberExpr, Str, Tpl, TplElement},
+    ecma::ast::{Expr, JSXExpr, Lit, MemberExpr, Str, Tpl, TplElement},
 };
 
 use crate::builders::{serializers, utils};
+
+use super::serializers::ComputedOrIdent;
 
 /// Generates a Box<Expr> give a MemberExpr and Span
 ///
@@ -43,22 +45,22 @@ pub fn box_expr(member: &MemberExpr, span: Span) -> Option<Box<Expr>> {
     }
 
     // Serializes all Ident in member into a single String l.common.foobar -> "common:foobar"
-    let translation_value = serializers::member_expr(member, &mut vec![]);
+    let identifiers = serializers::member_expr(member, &mut vec![]);
 
     // If builders::serializers::l::expr could not generate a String representation of Member it returns ""
     // This means that the translation l.common is invalid
-    if translation_value == "" {
+    if identifiers.is_empty() {
         return None;
     }
 
-    // translation_value contains a ${ we need to generate an Expr::Tpl
-    if translation_value.contains("${") {
-        let template_expr = expr_tpl(translation_value, span);
+    // identifiers contains a computed Ident we need to generate an Expr::Tpl
+    if identifiers.iter().any(|ci| ci.computed) {
+        let template_expr = expr_tpl(identifiers, span);
         return Some(Box::new(template_expr));
     }
 
     // translation_value does not contain an interpolated value so we generate a Expr::Lit
-    let expr = expr_lit(translation_value, span);
+    let expr = expr_lit(identifiers, span);
 
     // This Expr can then be inserted into the AST to complete the code transformation process
     return Some(Box::new(expr));
@@ -122,7 +124,8 @@ pub fn jsx_expr(member: &MemberExpr, span: Span) -> Option<JSXExpr> {
 ///   span: span,
 /// })));
 /// ```
-fn expr_lit(translation_value: String, span: Span) -> Expr {
+fn expr_lit(identifiers: Vec<ComputedOrIdent>, span: Span) -> Expr {
+    let translation_value = serializers::concatenate_identifiers(identifiers);
     // Else condition where translation_value does not contain ${} interpolated values
     // raw properties of a Str need to contain escaped quotations such that they are represented as such in the AST
     // "\"common:foobar\"", this is why we are using r#, SUPER IMPORTANT!
@@ -139,39 +142,85 @@ fn expr_lit(translation_value: String, span: Span) -> Expr {
 
 /// Given a String with interpolated values "common:foo${bar}" expr_tpl will generate an Expr::Tpl enum
 /// We can later inject it into the AST to replace the respective l.common.foo[bar]
-fn expr_tpl(translation_value: String, span: Span) -> Expr {
-    let split_translation = translation_value.split("${").collect::<Vec<_>>();
+fn expr_tpl(identifiers: Vec<ComputedOrIdent>, span: Span) -> Expr {
+    let mut quasis: Vec<TplElement> = vec![];
+    let mut quasis_group: String = "".to_string();
+    let mut exprs: Vec<Box<Expr>> = vec![];
 
-    // quasis being the portion the appears before the interpolated property
-    // ex: for "common:foo.${bar}" quasis would be "common:foo."
-    let quasis = split_translation.get(0).unwrap();
+    for (i, ci) in identifiers.iter().enumerate() {
+        let first_iteration = i == 0;
+        let last_iteration = i == identifiers.len() - 1;
 
-    // For the above described example, expr would be "bar" after stripping ${}
-    let expr = split_translation.get(1).unwrap().replace("}", "");
+        // expr that needs to be added to exprs, ex: ${common}
+        if ci.computed {
+            // if quasis_group is not empty it means that we have prevously collected quasis that needs to be committed to the AST
+            if !quasis_group.is_empty() {
+                quasis.push(TplElement {
+                    span: span,
+                    tail: i == identifiers.len() - 1, // if this is the last ident, this quasis needs "tail: true"
+                    cooked: Some(quasis_group.clone().into()),
+                    raw: quasis_group.clone().into(),
+                });
 
-    // TemplateLiterals are based on TplElement where each TplElement represents a quasis
-    // In this case it would represent "common:foo." in an AST friendly format
-    let tpl_element = TplElement {
+                quasis_group = "".to_string();
+            }
+
+            // Each expression within a TemplateLiteral must follow with a . unless it's the namespace
+            if !last_iteration && !first_iteration {
+                quasis_group = quasis_group + ".";
+            }
+
+            if first_iteration {
+                // We need to add : as it follows all namespaces computed or not
+                quasis_group = quasis_group + ":";
+
+                // If the first element is computed, we must append an empty quasis
+                quasis.push(TplElement {
+                    span: span,
+                    tail: false,
+                    cooked: Some("".into()),
+                    raw: "".into(),
+                });
+            }
+
+            // For the above described example, expr would be "bar" after stripping ${}
+            exprs.push(Box::new(Expr::Ident(ci.ident.clone())));
+
+            // The last entry within a TemplateLiteral is computed, we need to add an empty trailing quasis
+            if i == identifiers.len() - 1 {
+                quasis.push(TplElement {
+                    span: span,
+                    tail: true,
+                    cooked: Some("".into()),
+                    raw: "".into(),
+                });
+            }
+        } else {
+            // not computed ident
+            quasis_group = quasis_group + &ci.ident.sym as &str;
+
+            if first_iteration {
+                // we can assume that this is the namespace that is being added
+                quasis_group = quasis_group + ":";
+            } else if !last_iteration {
+                quasis_group = quasis_group + ".";
+            }
+        }
+    }
+
+    // When the template literal ends with a quasis
+    if !quasis_group.is_empty() {
+        quasis.push(TplElement {
+            span: span,
+            tail: false,
+            cooked: Some(quasis_group.clone().into()),
+            raw: quasis_group.clone().into(),
+        });
+    }
+
+    return Expr::Tpl(Tpl {
+        exprs: exprs,
+        quasis: quasis,
         span: span,
-        tail: false,
-        cooked: Some(quasis.clone().into()),
-        raw: quasis.clone().into(),
-    };
-
-    // All TemplateLiterals seem to require a "tail: true" TplElement to close off the quasis before the expr
-    // Otherwise the plugin will panic at the disco
-    let tail_element = TplElement {
-        span: span,
-        tail: true,
-        cooked: Some("".into()),
-        raw: "".into(),
-    };
-
-    let tpl = Tpl {
-        exprs: vec![Box::new(Ident::new(expr.into(), span).into())],
-        quasis: vec![tpl_element, tail_element],
-        span: span,
-    };
-
-    return Expr::Tpl(tpl);
+    });
 }

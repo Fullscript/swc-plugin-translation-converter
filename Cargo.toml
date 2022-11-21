@@ -4,7 +4,7 @@ description = "SWC plugin for converting Fullscript translations into react-i18n
 edition = "2021"
 license = "MIT"
 name = "swc-plugin-translation-converter"
-version = "1.0.1"
+version = "1.0.2"
 
 [lib]
 crate-type = ["cdylib"]

@@ -192,8 +192,14 @@ test!(
     config(),
     |_| tr(),
     converts_l_to_template_literal_member_expressions,
-    r#"const bar = 'cat';t(l.common.foo[bar]);"#,
-    r#"const bar = 'cat';t(`common:foo.${bar}`);"#
+    r#"
+    const bar = 'cat';
+    t(l.common.foo[bar]);
+    "#,
+    r#"
+    const bar = 'cat';
+    t(`common:foo.${bar}`);
+    "#
 );
 
 test!(
@@ -202,6 +208,22 @@ test!(
     converts_l_template_literal_member_expressions_with_variable_namespace,
     r#"t(l[common].foo[bar]);"#,
     r#"t(`${common}:foo.${bar}`);"#
+);
+
+test!(
+    config(),
+    |_| tr(),
+    converts_l_template_literal_member_expressions_with_trailing_quasis,
+    r#"t(l[common].foo1[bar1].foo2[bar2].foo3);"#,
+    r#"t(`${common}:foo1.${bar1}.foo2.${bar2}.foo3`);"#
+);
+
+test!(
+    config(),
+    |_| tr(),
+    converts_l_template_literal_member_expressions_with_expression_in_middle,
+    r#"t(l.common.foo1[bar1].foo3);"#,
+    r#"t(`common:foo1.${bar1}.foo3`);"#
 );
 
 test!(
@@ -335,5 +357,30 @@ test!(
     const variable = `${obj.property} ${t("common:foo1", {
       count: obj.property,
     })} ($${price.toFixed(2)} ${t("common:foo2")})`;
+    "#
+);
+
+// ----------------------------------------------------------------------------
+// Below are not passing!
+// ----------------------------------------------------------------------------
+test!(
+    config(),
+    |_| tr(),
+    converts_l_template_literal_member_expressions_with_nested_conditional,
+    r#"t(l.common.foo[bar ? "bar" : "baz"]);"#,
+    r#"t(`common:foo.${bar ? "bar" : "baz"}`);"#
+);
+
+test!(
+    config(),
+    |_| tr(),
+    converts_l_template_literal_member_expressions_with_computed_member_expressions,
+    r#"
+    const bar = {namespace: 'common', cat: 'kitty'};
+    t(l[bar.namespace].foo[bar.cat]);
+    "#,
+    r#"
+    const bar = {namespace: 'common', cat: 'kitty'};
+    t(`${bar.namespace}:foo.${bar.cat}`);
     "#
 );
