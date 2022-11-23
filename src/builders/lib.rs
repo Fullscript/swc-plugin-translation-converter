@@ -5,7 +5,7 @@ use swc_core::{
 
 use crate::builders::{serializers, utils};
 
-use super::serializers::ComputedOrIdent;
+use super::serializers::ExprWithComputed;
 
 /// Generates a Box<Expr> give a MemberExpr and Span
 ///
@@ -45,22 +45,22 @@ pub fn box_expr(member: &MemberExpr, span: Span) -> Option<Box<Expr>> {
     }
 
     // Serializes all Ident in member into a single String l.common.foobar -> "common:foobar"
-    let identifiers = serializers::member_expr(member, &mut vec![]);
+    let exprs = serializers::member_expr(member, &mut vec![]);
 
     // If builders::serializers::l::expr could not generate a String representation of Member it returns ""
     // This means that the translation l.common is invalid
-    if identifiers.is_empty() {
+    if exprs.is_empty() {
         return None;
     }
 
-    // identifiers contains a computed Ident we need to generate an Expr::Tpl
-    if identifiers.iter().any(|ci| ci.computed) {
-        let template_expr = expr_tpl(identifiers, span);
+    // exprs contains a computed Ident we need to generate an Expr::Tpl
+    if exprs.iter().any(|expr| expr.computed) {
+        let template_expr = expr_tpl(exprs, span);
         return Some(Box::new(template_expr));
     }
 
     // translation_value does not contain an interpolated value so we generate a Expr::Lit
-    let expr = expr_lit(identifiers, span);
+    let expr = expr_lit(exprs, span);
 
     // This Expr can then be inserted into the AST to complete the code transformation process
     return Some(Box::new(expr));
@@ -124,8 +124,8 @@ pub fn jsx_expr(member: &MemberExpr, span: Span) -> Option<JSXExpr> {
 ///   span: span,
 /// })));
 /// ```
-fn expr_lit(identifiers: Vec<ComputedOrIdent>, span: Span) -> Expr {
-    let translation_value = serializers::concatenate_identifiers(identifiers);
+fn expr_lit(exprs: Vec<ExprWithComputed>, span: Span) -> Expr {
+    let translation_value = serializers::concatenate_identifiers(exprs);
     // Else condition where translation_value does not contain ${} interpolated values
     // raw properties of a Str need to contain escaped quotations such that they are represented as such in the AST
     // "\"common:foobar\"", this is why we are using r#, SUPER IMPORTANT!
@@ -142,22 +142,22 @@ fn expr_lit(identifiers: Vec<ComputedOrIdent>, span: Span) -> Expr {
 
 /// Given a String with interpolated values "common:foo${bar}" expr_tpl will generate an Expr::Tpl enum
 /// We can later inject it into the AST to replace the respective l.common.foo[bar]
-fn expr_tpl(identifiers: Vec<ComputedOrIdent>, span: Span) -> Expr {
+fn expr_tpl(exprs_with_computed: Vec<ExprWithComputed>, span: Span) -> Expr {
     let mut quasis: Vec<TplElement> = vec![];
     let mut quasis_group: String = "".to_string();
     let mut exprs: Vec<Box<Expr>> = vec![];
 
-    for (i, ci) in identifiers.iter().enumerate() {
+    for (i, expr_with_computed) in exprs_with_computed.iter().enumerate() {
         let first_iteration = i == 0;
-        let last_iteration = i == identifiers.len() - 1;
+        let last_iteration = i == exprs_with_computed.len() - 1;
 
         // expr that needs to be added to exprs, ex: ${common}
-        if ci.computed {
+        if expr_with_computed.computed {
             // if quasis_group is not empty it means that we have prevously collected quasis that needs to be committed to the AST
             if !quasis_group.is_empty() {
                 quasis.push(TplElement {
                     span: span,
-                    tail: i == identifiers.len() - 1, // if this is the last ident, this quasis needs "tail: true"
+                    tail: i == exprs_with_computed.len() - 1, // if this is the last ident, this quasis needs "tail: true"
                     cooked: Some(quasis_group.clone().into()),
                     raw: quasis_group.clone().into(),
                 });
@@ -184,10 +184,10 @@ fn expr_tpl(identifiers: Vec<ComputedOrIdent>, span: Span) -> Expr {
             }
 
             // For the above described example, expr would be "bar" after stripping ${}
-            exprs.push(Box::new(Expr::Ident(ci.ident.clone())));
+            exprs.push(expr_with_computed.expr.clone());
 
             // The last entry within a TemplateLiteral is computed, we need to add an empty trailing quasis
-            if i == identifiers.len() - 1 {
+            if i == exprs_with_computed.len() - 1 {
                 quasis.push(TplElement {
                     span: span,
                     tail: true,
@@ -197,7 +197,8 @@ fn expr_tpl(identifiers: Vec<ComputedOrIdent>, span: Span) -> Expr {
             }
         } else {
             // not computed ident
-            quasis_group = quasis_group + &ci.ident.sym as &str;
+            // so we can assume it's an ident
+            quasis_group = quasis_group + &expr_with_computed.expr.as_ident().unwrap().sym as &str;
 
             if first_iteration {
                 // we can assume that this is the namespace that is being added

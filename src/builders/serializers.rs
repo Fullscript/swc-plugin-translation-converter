@@ -1,8 +1,8 @@
-use swc_core::ecma::ast::{Ident, MemberExpr};
+use swc_core::ecma::ast::{Expr, MemberExpr};
 
 #[derive(Clone)]
-pub struct ComputedOrIdent<'a> {
-    pub ident: &'a Ident,
+pub struct ExprWithComputed {
+    pub expr: Box<Expr>,
     pub computed: bool,
 }
 
@@ -27,22 +27,22 @@ pub struct ComputedOrIdent<'a> {
 ///     ComputerOrIdent { ident: bar_ident, computed: true }
 /// ]);
 /// ```
-pub fn member_expr<'a>(
-    member: &'a MemberExpr,
-    identifiers: &mut Vec<ComputedOrIdent<'a>>,
-) -> Vec<ComputedOrIdent<'a>> {
+pub fn member_expr(
+    member: &MemberExpr,
+    exprs: &mut Vec<ExprWithComputed>,
+) -> Vec<ExprWithComputed> {
     // Case where member_expr is a nested collection of MemberExpr
     // We need to recursively continue down the AST collecting all Ident as we go
     // ex: l.common.foobar
     if member.obj.is_member() {
-        member_expr(member.obj.as_member().unwrap(), identifiers);
+        member_expr(member.obj.as_member().unwrap(), exprs);
     }
 
-    // If prop is an Ident, add it to the list of identifiers to convert into a StringLiteral
+    // If prop is an Ident, add it to the list of exprs to convert into a StringLiteral
     if member.prop.is_ident() {
         let ident = member.prop.as_ident().unwrap();
-        identifiers.push(ComputedOrIdent {
-            ident: ident,
+        exprs.push(ExprWithComputed {
+            expr: Box::new(Expr::Ident(ident.clone())),
             computed: false,
         });
     // If prop is a computed expr we need to convert [bar] into ${bar} before adding to the list of identifiers
@@ -50,22 +50,21 @@ pub fn member_expr<'a>(
     } else if member.prop.is_computed() {
         let computed = member.prop.as_computed().unwrap();
 
-        if computed.expr.is_ident() {
-            let ident = computed.expr.as_ident().unwrap();
-            identifiers.push(ComputedOrIdent {
-                ident: ident,
-                computed: true,
-            });
-        }
+        exprs.push(ExprWithComputed {
+            expr: computed.expr.clone(),
+            computed: true,
+        });
     }
 
-    return identifiers.clone();
+    return exprs.clone();
 }
 
-fn join_identifiers(identifiers: &[ComputedOrIdent], delimiter: &str) -> String {
-    return identifiers
+/// Joins a list of identifiers with the specified delimiter and outputs a string
+/// Assumes that exprs contains only identifiers
+fn join_identifiers(exprs: &[ExprWithComputed], delimiter: &str) -> String {
+    return exprs
         .iter()
-        .map(|i| i.ident.sym.to_string())
+        .map(|e| e.expr.as_ident().unwrap().sym.to_string())
         .collect::<Vec<String>>()
         .join(delimiter);
 }
@@ -86,7 +85,7 @@ fn join_identifiers(identifiers: &[ComputedOrIdent], delimiter: &str) -> String 
 ///
 /// assert_eq!("common:foo1.foo2", translation);
 /// ```
-pub fn concatenate_identifiers(identifiers: Vec<ComputedOrIdent>) -> String {
+pub fn concatenate_identifiers(identifiers: Vec<ExprWithComputed>) -> String {
     // If collected identifiers is size 2 or more, we can safely concatenate the contents of identifiers
     // ex: ["common", "foo1", "foo2"]
     if identifiers.len() >= 2 {
