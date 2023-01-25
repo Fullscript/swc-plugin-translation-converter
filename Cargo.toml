@@ -4,7 +4,7 @@ description = "SWC plugin for converting Fullscript translations into react-i18n
 edition = "2021"
 license = "MIT"
 name = "swc-plugin-translation-converter"
-version = "1.0.3"
+version = "1.0.4"
 
 [lib]
 crate-type = ["cdylib"]
@@ -15,17 +15,13 @@ lto = true
 [dependencies]
 serde = "1"
 serde_json = "1.0.87"
-swc_core = { version = "0.40.*", features = [
-  "plugin_transform", 
-  "ecma_visit",
+swc_core = { version = "0.58.5", features = [
   "ecma_ast",
+  "ecma_plugin_transform",
+  "ecma_visit",
   "common",
 ] }
-swc_ecma_parser = { version = "0.122.25", features = [
+swc_ecma_parser = { version = "0.124.2", features = [
   "typescript",
 ] }
 swc_visit = { version = "0.5.3" }
-
-# .cargo/config defines few alias to build plugin.
-# cargo build-wasi generates wasm-wasi32 binary
-# cargo build-wasm32 generates wasm32-unknown-unknown binary.
