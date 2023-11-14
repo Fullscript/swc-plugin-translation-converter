@@ -176,16 +176,14 @@ test!(
     config(),
     |_| tr(),
     converts_l_member_expressions_inside_of_t_functions,
-    r#"t(l.common.fooBar);"#,
-    r#"t("common:fooBar");"#
+    r#"t(l.common.fooBar);"#
 );
 
 test!(
     config(),
     |_| tr(),
     converts_l_member_expressions_inside_of_t_func_with_variables,
-    r#"t(l.common.fooBar, { userName });"#,
-    r#"t("common:fooBar", { userName });"#
+    r#"t(l.common.fooBar, { userName });"#
 );
 
 test!(
@@ -195,10 +193,6 @@ test!(
     r#"
     const bar = 'cat';
     t(l.common.foo[bar]);
-    "#,
-    r#"
-    const bar = 'cat';
-    t(`common:foo.${bar}`);
     "#
 );
 
@@ -206,32 +200,28 @@ test!(
     config(),
     |_| tr(),
     converts_l_template_literal_member_expressions_with_variable_namespace,
-    r#"t(l[common].foo[bar]);"#,
-    r#"t(`${common}:foo.${bar}`);"#
+    r#"t(l[common].foo[bar]);"#
 );
 
 test!(
     config(),
     |_| tr(),
     converts_l_template_literal_member_expressions_with_trailing_quasis,
-    r#"t(l[common].foo1[bar1].foo2[bar2].foo3);"#,
-    r#"t(`${common}:foo1.${bar1}.foo2.${bar2}.foo3`);"#
+    r#"t(l[common].foo1[bar1].foo2[bar2].foo3);"#
 );
 
 test!(
     config(),
     |_| tr(),
     converts_l_template_literal_member_expressions_with_expression_in_middle,
-    r#"t(l.common.foo1[bar1].foo3);"#,
-    r#"t(`common:foo1.${bar1}.foo3`);"#
+    r#"t(l.common.foo1[bar1].foo3);"#
 );
 
 test!(
     config(),
     |_| tr(),
     converts_l_that_is_part_of_ternary,
-    r#"t(something ? l.user.foo : l.user.bar);"#,
-    r#"t(something ? "user:foo" : "user:bar");"#
+    r#"t(something ? l.user.foo : l.user.bar);"#
 );
 
 test!(
@@ -241,11 +231,6 @@ test!(
     r#"
     const testFunc = () => {
       return l.userName.foo;
-    }
-    "#,
-    r#"
-    const testFunc = () => {
-      return "userName:foo";
     }
     "#
 );
@@ -258,11 +243,6 @@ test!(
     const testFunc = () => {
       return true ? l.userName.foo : l.userName.bar;
     }
-    "#,
-    r#"
-    const testFunc = () => {
-      return true ? "userName:foo" : "userName:bar";
-    }
     "#
 );
 
@@ -270,23 +250,20 @@ test!(
     config(),
     |_| tr(),
     converts_l_with_many_nested_namesapces,
-    r#"t(l.clerk.one.two.three.four);"#,
-    r#"t("clerk:one.two.three.four");"#
+    r#"t(l.clerk.one.two.three.four);"#
 );
 
 test!(
     config(),
     |_| tr(),
     converts_nested_l_member_expression,
-    r#"t(l.userName.bla, { label: l.userName.label });"#,
-    r#"t("userName:bla", { label: "userName:label" });"#
+    r#"t(l.userName.bla, { label: l.userName.label });"#
 );
 
 test!(
     config(),
     |_| tr(),
     does_not_convert_member_expressions_that_do_not_start_with_l,
-    r#"t(b.userName.bla);"#,
     r#"t(b.userName.bla);"#
 );
 
@@ -294,36 +271,14 @@ test!(
     config(),
     |_| tr(),
     converts_nested_t_functions,
-    r#"
-    <Component>
-      {t(l.common.foo1, {
-        label: t(l.common.foo2[bar]),
-      })}
-    </Component>
-    "#,
-    r#"
-    <Component>
-      {t("common:foo1", {
-        label: t(`common:foo2.${bar}`),
-      })}
-    </Component>
-    "#
+    r#"<Component>{t(l.common.foo1, { label: t(l.common.foo2[bar]) })}</Component>"#
 );
 
 test!(
     config(),
     |_| tr(),
     converts_trans_i18n_key,
-    r#"
-    <Trans i18nKey={l.common.foobar}>
-      hello world
-    </Trans>
-    "#,
-    r#"
-    <Trans i18nKey={"common:foobar"}>
-      hello world
-    </Trans>
-    "#
+    r#"<Trans i18nKey={l.common.foobar}>hello world</Trans>"#
 );
 
 test!(
@@ -334,12 +289,6 @@ test!(
     <Collapsible
       trigger={mobileHeaderContent(faChevronDown, l.common.ShowOrderSummary)}
       triggerWhenOpen={mobileHeaderContent(faChevronUp, l.common.HideOrderSummary)}
-    />
-    "#,
-    r#"
-    <Collapsible
-      trigger={mobileHeaderContent(faChevronDown, "common:ShowOrderSummary")}
-      triggerWhenOpen={mobileHeaderContent(faChevronUp, "common:HideOrderSummary")}
     />
     "#
 );
@@ -352,11 +301,6 @@ test!(
     const variable = `${obj.property} ${t(l.common.foo1, {
       count: obj.property,
     })} ($${price.toFixed(2)} ${t(l.common.foo2)})`;
-    "#,
-    r#"
-    const variable = `${obj.property} ${t("common:foo1", {
-      count: obj.property,
-    })} ($${price.toFixed(2)} ${t("common:foo2")})`;
     "#
 );
 
@@ -364,8 +308,7 @@ test!(
     config(),
     |_| tr(),
     converts_l_template_literal_member_expressions_with_nested_conditional,
-    r#"t(l.common.foo[bar ? "bar" : "baz"]);"#,
-    r#"t(`common:foo.${bar ? "bar" : "baz"}`);"#
+    r#"t(l.common.foo[bar ? "bar" : "baz"]);"#
 );
 
 test!(
@@ -375,9 +318,5 @@ test!(
     r#"
     const bar = {namespace: 'common', cat: 'kitty'};
     t(l[bar.namespace].foo[bar.cat]);
-    "#,
-    r#"
-    const bar = {namespace: 'common', cat: 'kitty'};
-    t(`${bar.namespace}:foo.${bar.cat}`);
     "#
 );

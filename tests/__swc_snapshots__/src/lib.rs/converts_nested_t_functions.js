@@ -1,0 +1,1 @@
+<Component>{t("common:foo1", { label: t(`common:foo2.${bar}`) })}</Component>

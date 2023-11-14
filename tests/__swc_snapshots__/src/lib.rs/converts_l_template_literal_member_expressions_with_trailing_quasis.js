@@ -1,0 +1,1 @@
+t(`${common}:foo1.${bar1}.foo2.${bar2}.foo3`);

@@ -1,0 +1,1 @@
+t(`${common}:foo.${bar}`);

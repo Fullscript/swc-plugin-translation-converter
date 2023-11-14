@@ -1,0 +1,1 @@
+t(something ? "user:foo" : "user:bar");

@@ -1,0 +1,1 @@
+<Trans i18nKey={"common:foobar"}>hello world</Trans>

@@ -64,9 +64,7 @@ Wherever your SWC configuration is located, add the following:
   jsc: {
     //...
     experimental: {
-      plugins: [
-        ["@fullscript/swc-plugin-translation-converted", {}],
-      ]
+      plugins: [["@fullscript/swc-plugin-translation-converted", {}]];
     }
   }
 }
@@ -76,9 +74,12 @@ Wherever your SWC configuration is located, add the following:
 
 Bug reports and pull requests are welcome :)
 
+### Testing
+
+1. Run: `cargo test`
+2. fixtures are located in `tests/__swc_snapshots__/src/lib.rs` and named the same as the test they're associated to
+
 ### Building for release
 
-1. Run: `cargo build-wasi --release`
-2. Copy the resulting wasm file to the root of the project:
-`cp ./target/wasm32-wasi/release/swc_plugin_translation_converter.wasm .`
-3. Commit and push!
+1. Run: `yarn build`
+2. Commit and push!

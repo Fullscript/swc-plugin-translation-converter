@@ -1,0 +1,1 @@
+t("clerk:one.two.three.four");
