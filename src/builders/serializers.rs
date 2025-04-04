@@ -1,4 +1,5 @@
-use swc_core::ecma::ast::{Expr, MemberExpr};
+use swc_core::common::SyntaxContext;
+use swc_ecma_ast::{Expr, Ident, MemberExpr};
 
 #[derive(Clone)]
 pub struct ExprWithComputed {
@@ -40,9 +41,14 @@ pub fn member_expr(
 
     // If prop is an Ident, add it to the list of exprs to convert into a StringLiteral
     if member.prop.is_ident() {
-        let ident = member.prop.as_ident().unwrap();
+        let ident_name = member.prop.as_ident().unwrap();
+        let ident = Ident::new(
+            ident_name.sym.clone(),
+            ident_name.span,
+            SyntaxContext::empty(),
+        );
         exprs.push(ExprWithComputed {
-            expr: Box::new(Expr::Ident(ident.clone())),
+            expr: Box::new(Expr::Ident(ident)),
             computed: false,
         });
     // If prop is a computed expr we need to convert [bar] into ${bar} before adding to the list of identifiers
