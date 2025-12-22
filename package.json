@@ -1,6 +1,6 @@
 {
   "name": "@fullscript/swc-plugin-translation-converter",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "SWC plugin for converting Fullscript translations into react-i18next compatible code",
   "author": "Ryan O'Connor",
   "license": "MIT",
@@ -8,7 +8,7 @@
     "swc-plugin"
   ],
   "scripts": {
-    "build": "cargo build --release --target wasm32-wasip1 && cp ./target/wasm32-wasi/release/swc_plugin_translation_converter.wasm ."
+    "build": "cargo build --release --target wasm32-wasip1 && cp ./target/wasm32-wasip1/release/swc_plugin_translation_converter.wasm ."
   },
   "main": "./swc_plugin_translation_converter.wasm",
   "files": [
