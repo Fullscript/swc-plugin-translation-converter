@@ -4,7 +4,7 @@ description = "SWC plugin for converting Fullscript translations into react-i18n
 edition = "2021"
 license = "MIT"
 name = "swc-plugin-translation-converter"
-version = "2.0.0"
+version = "3.0.0"
 
 [lib]
 crate-type = ["cdylib"]
@@ -13,15 +13,14 @@ crate-type = ["cdylib"]
 lto = false
 
 [dependencies]
-serde = "1"
-serde_json = "1.0.87"
-swc_core = { version = "19.0.0", features = [
+serde = "1.0.203"
+serde_json = "1.0.117"
+swc_core = { version = "46.0.3", features = [
   "ecma_plugin_transform",
   "common",
 ] }
-swc_ecma_visit = { version = "8.0.0" }
-swc_ecma_ast = { version = "8.1.0" }
-swc_ecma_parser = { version = "11.0.0", features = [
+swc_ecma_visit = { version = "17.0.0" }
+swc_ecma_ast = { version = "17.0.0" }
+swc_ecma_parser = { version = "26.0.0", features = [
   "typescript",
 ] }
-swc_visit = { version = "2.0.0" }
