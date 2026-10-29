@@ -39,6 +39,8 @@ const Component = () => {
 
 If you don't already have **swc** setup, you can follow their [getting started guide](https://swc.rs/docs/getting-started).
 
+This plugin is built with `swc_core` 82 and is tested with `@rspack/core` 2.2.9 using `builtin:swc-loader`. SWC plugin compatibility depends on the host's SWC version.
+
 ## Installation
 
 Add **swc-plugin-jsx-remove-attribute** to your dependencies like so:
@@ -77,7 +79,8 @@ Bug reports and pull requests are welcome :)
 ### Testing
 
 1. Run: `cargo test`
-2. fixtures are located in `tests/__swc_snapshots__/src/lib.rs` and named the same as the test they're associated to
+2. Fixtures are located in `tests/__swc_snapshots__/src/lib.rs` and named the same as the test they're associated to.
+3. Run `yarn test` to build the WASM plugin and test it with Rspack. This requires the Rust `wasm32-wasip1` target.
 
 ### Building for release
 
